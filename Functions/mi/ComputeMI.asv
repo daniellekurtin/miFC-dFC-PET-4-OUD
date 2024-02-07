@@ -1,0 +1,163 @@
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% COMPUTE MI FROM SCRATCH
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%{
+The goal is to code  p^(x)=1N∑i=1Nδ(x−x(i),h), eq 17 in Peng 2005,
+which is the joint probability of x and y. 
+This required the following steps:
+    1. Define δ 
+        1.1 Define z, h, sigma
+        1.2 Check for peer review - is sigma positive and (semi)definite?
+        1.3 Compute δ 
+    2. Compute the approximate density function
+    3. Compare to the MI results using Peng's functions
+%}
+
+
+% Toy dataset of 10 "regions" and their 100-volume "timeseries"
+xx=rand([100,10]);
+
+% Create two toy timeseries at a time, xs and ys
+xs=xx(:,1)';
+ys=xx(:,2)';
+points=[xs ys];
+
+
+for ii=1:length(xs)
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% STEP 1: Compute δ
+% STEP 1.1: Define z, h, and Sigma
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% The equation governing δ is 
+% δ(z,h)=exp(−zTΣ−1z2h2) / {(2π)d/2hd|Σ|1/2}
+% As inputs, this needs z, h, and Sigma
+% Getting z, which is x-xi - extract the i-th data point and convert it to a column vector
+xi = xs(:,ii)'; 
+z=xs-xi;
+
+% Define sigma, which is the covariance of z
+Sigma=cov(z);
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% STEP 1.2
+% CRUCIAL FOR PEER REVIEW - CHECK TO SEE IF THE COVARIANCE MATRIX IS 
+% POSITIVE AND (SEMI)DEFINITE
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% The reviewer is concerend it is not because the number of time points
+% (42?)
+% is comparable to the number of time-series (100), 
+% the covariance matrix will not 
+% be positive semi-definite as expected, and a regularisation procedure has
+% to be implemented. 
+% This website 
+% https://math.stackexchange.com/questions/2533610/how-do-you-recognize-a-positive-semidefinite-matrix
+% Gave three examples to compute whether a matrix is positive and definite.
+% First, 
+
+%pos_def = isequal(M,M') && all( eig(M)>0 ) ;
+
+% Define h, which is window width - issue, b/c wtf is h? 
+% If we want to compute h that scales with the variance around the point,
+% I've taken code from the below repo, and it's somewhat helped
+% https://gist.github.com/zahlenteufel/0ea490a1b28b7cc62492
+% To justify what h is to the reviewer, I would say that their previous
+% work (and cite the paper I used for ChatGPT) defined the window around h
+% as a Gaussian
+M = ii;
+for i = 1:M
+for j= 1:M
+    pXY(i,j) = 0;
+    
+    Hmax = M;
+    Hmin = 0.001;
+    
+    while Hmax - Hmin > 0.1
+        H = (Hmax+Hmin) / 2;
+        inside = sum(pointsdist(points, [xs(i) ys(j)]') < H);
+        if inside > sqrt(M)
+            Hmax = H;
+        else 
+            Hmin = H;
+        end
+    end
+    
+    h = H;
+
+end
+end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% STEP 1.3: Compute δ
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Calculates the value of equation 18 in Peng 2005 paper
+% https://ieeexplore-ieee-org.surrey.idm.oclc.org/document/1453511/
+% δ(z,h)=exp(−zTΣ−1z2h2) / {(2π)d/2hd|Σ|1/2}
+
+d = length(z); % dimensionality of the problem
+
+% calculate the denominator
+denom = (2*pi)^(d/2) * h^d * sqrt(det(Sigma));
+
+% calculate the numerator
+num = exp(-z' * inv(Sigma) * z / (2 * h^2));
+
+% calculate the result 
+DELTA{ii,1} = num / denom;
+
+
+%%%%%%%%%%%%%%%%%
+% Adding δ, or delta, back to desity estimator
+%%%%%%%%%%%%%%%%%
+%{
+
+Given N samples of a variable x, the approximate density function p^(x) 
+has the following form, which is eq 17:
+p^(x)=1N∑i=1Nδ(x−x(i),h) 
+where δ(.) is the Parzen window function as above
+x(i) is the ith sample
+h is the window width.
+
+The inline function I was recommended to compute a multivariate Gaussian 
+kernel function with known bandwidth doesn't work all in one, so I've
+broken it down
+kernel = @(z, h) (2*pi*h^2)^(-length(z)/2) * exp(-0.5*z'*inv(h^2*eye(length(z)))*z); %
+
+%}
+
+result = 0;
+N = size(DELTA{ii,1}, 1);
+
+for i = 1:N
+
+    %    result = result + kernel(ii - DELTA{ii,1}(i,:), h);
+    firstTerm=(2*pi*h^2)^(-length(z)/2);
+    secondTermPart1=-0.5*z';
+    secondTermPart2=inv(h^2*eye(length(z)));
+    secondTermPart3=secondTermPart2.*z;
+    secondTerm=exp(secondTermPart1.*secondTermPart3);
+    kernel=firstTerm*secondTerm;
+
+    result=result+kernel;
+end
+
+Result = result / N; % divide by N to get the average
+
+BigResult(ii,1) = Result(1,1); % divide by N to get the average
+
+
+end
+
+
+%%
+% Compute miFC
+for ii=1:2
+    for jj=1:ii   % miFC is nonsymmetric, so this prevents making a symmetric matrix and doing everything twice
+        Mutinf(ii,jj)=mutualinfo(xx(:,ii),xx(:,jj));
+    end
+end

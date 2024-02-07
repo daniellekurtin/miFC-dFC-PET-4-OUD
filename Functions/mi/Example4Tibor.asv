@@ -1,0 +1,181 @@
+
+% Quick implementation of mutual information functional connectivity (miFC)
+
+% Toy dataset of 10 "regions" and their 100-volume "timeseries"
+xx=rand([100,10]);
+
+% Compute miFC
+for ii=1:width(xx)
+    for jj=1:ii   % miFC is nonsymmetric, so this prevents making a symmetric matrix and doing everything twice
+        Mutinf(ii,jj)=mutualinfo(xx(:,ii),xx(:,jj));
+    end
+end
+
+%%
+%%%%%%%%%%%%%%%%%
+% Defining vars to compute PDF δ
+%%%%%%%%%%%%%%%%%
+% Now to try to break down what the mutual info code is doing
+% Taking two toy timeseries at a time, x and y
+
+% xs=xx(:,1)';
+% % ys=xx(:,2)';
+
+
+% xs=TMPTBL(:,1);
+% ys=TMPTBL(:,2);
+% ys=table2array(ys)';
+% xs=table2array(xs)';
+% points=[xs ys];
+
+
+for ii=1:length(xs)
+% The goal is to code  p^(x)=1N∑i=1Nδ(x−x(i),h), and the first step is to
+% code δ
+
+% As inputs, this needs z, h, and Sigma
+% Getting z
+% for now, instead of looping, i will just be the first point
+xi = xs(:,ii)'; % extract the i-th data point and convert it to a column vector
+z=xs-xi;
+
+% Define sigma, which is the covariance of z
+Sigma=cov(z);
+
+% Define h, which is window width - issue, b/c wtf is h?
+% If we want to compute h that scales with the variance around the point,
+% I've taken code from the below repo, and it's somewhat helped
+% https://gist.github.com/zahlenteufel/0ea490a1b28b7cc62492
+M = ii;
+for i = 1:M
+for j= 1:M
+    pXY(i,j) = 0;
+    
+    Hmax = M;
+    Hmin = 0.001;
+    
+    while Hmax - Hmin > 0.1
+        H = (Hmax+Hmin) / 2;
+        inside = sum(pointsdist(points, [xs(i) ys(j)]') < H);
+        if inside > sqrt(M)
+            Hmax = H;
+        else 
+            Hmin = H;
+        end
+    end
+    
+    h = H;
+
+%     for k=1:n             
+%         dist = norm([xs(i) ys(j)]' - points(:,k));
+%         pXY(i,j) = pXY(i,j) + normpdf(dist/h,0,1);
+%     end
+end
+end
+
+
+%%%%%%%%%%%%%%%%%
+% Coding δ
+%%%%%%%%%%%%%%%%%
+
+% Calculates the value of equation 18 in Peng 2005 paper
+% https://ieeexplore-ieee-org.surrey.idm.oclc.org/document/1453511/
+% δ(z,h)=exp(−zTΣ−1z2h2) / {(2π)d/2hd|Σ|1/2}
+
+d = length(z); % dimensionality of the problem
+
+% calculate the denominator
+% THIS WAS THE ORIGINAL CODE - however, I think taking the determinent of the matrix
+% is not what should be done, so I'll change it to be the absolute val
+% denom = (2*pi)^(d/2) * h^d * sqrt(det(Sigma));
+denom = (2*pi)^(d/2) * h^d * abs(sqrt(Sigma));
+
+% calculate the numerator
+num = exp(-z' * inv(Sigma) * z / (2 * h^2));
+
+% calculate the result - hopefully delta has both z and h, because that's
+% what I need!!
+DELTA{ii,1} = num / denom;
+end
+
+%%
+%%%%%%%%%%%%%%%%%
+% Adding δ, or delta, back to desity estimator
+%%%%%%%%%%%%%%%%%
+
+function p = kernel_density_estimate(x, x_i, h)
+% This function computes the kernel density estimate for a set of points
+% x_i, with kernel function N(x; 0, h^2), evaluated at a set of points x.
+% The kernel function used is the Gaussian kernel.
+%
+% Inputs:
+%   - x: a vector or matrix of points at which to evaluate the kernel
+%   density estimate.
+%   - x_i: a matrix of data points.
+%   - h: the bandwidth of the kernel.
+%
+% Output:
+%   - p: a vector or matrix of kernel density estimates for the points in x.
+
+% Compute the kernel function for each data point
+kernel = @(u) exp(-0.5 * (u.^2) / h^2) / sqrt(2*pi*h^2);
+
+% Compute the kernel density estimate
+N = size(x_i, 2);
+p = zeros(size(x));
+for i = 1:N
+    p = p + kernel(x - x_i(:, i));
+end
+p = p / N;
+end
+
+
+
+
+
+
+
+
+
+
+
+
+%%
+%{
+
+% Calculates the value of the equation p^(x)=1/N ∑i=1^N δ(x-x(i), h)
+
+
+% This should already be M
+N = size(x, 1); % number of data points
+N=M;
+
+% Already defined d
+d = size(x, 2); % dimensionality of the problem
+
+% initialize the sum to zero
+sum = 0;
+
+% loop over all data points and accumulate the sum
+for i = 1:N
+
+    % get xi
+    xi = x(i,:)'; % extract the i-th data point and convert it to a column vector
+    z=x-xi;
+
+    % HERE IS WHERE I WILL PUT THE DELTA FUNCTION IM CODING ABOVE
+    delta_i = DELTA(z, h, Sigma); % compute the value of delta for the i-th data point
+
+    % Get the sum of everything
+    sum = sum + delta_i; % add delta_i to the sum
+end
+
+% divide the sum by N to obtain the average
+result = sum / N;
+end
+
+
+%}
+
+
+%%
