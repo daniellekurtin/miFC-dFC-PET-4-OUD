@@ -11,7 +11,7 @@ The code in this repository is to make the figures in the paper and run the foll
   <ol>
   <li> A novel dynamical functional connectivity analysis </li> 
   <li> Leading Eigenvector Dynamic Analysis </li> 
-  </ol>ol>
+  </ol>
 <li> Compute the following metrics of brain state dynamics: </li> 
   <ol>
   <li> State lifetime </li>
@@ -27,8 +27,7 @@ A visual schematic of this pipeline is below:
 
 ![Methods](https://github.com/daniellekurtin/miFC-dFC-PET-4-OUD/assets/45391054/03f1df69-0a92-4259-a134-0905f384b794)
 
-
-
+Note: this repository description is still under construction. I will add a description of the folder contents soon.
 
 A note on dependencies and availability: 
 Some of the PET images are too large to upload. However, all are available at Justine Hansen's repository: https://github.com/netneurolab/hansen_receptors/tree/main. 
